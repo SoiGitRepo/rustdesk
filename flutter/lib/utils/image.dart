@@ -21,8 +21,7 @@ Future<ui.Image> decodeImageFromPixels(
     assert(allowUpscaling || targetHeight <= height);
   }
 
-  final ui.ImmutableBuffer buffer =
-      await ui.ImmutableBuffer.fromUint8List(pixels);
+  final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
   onPixelsCopied?.call();
   final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
     buffer,
@@ -79,8 +78,8 @@ class ImagePainter extends CustomPainter {
         paint.filterQuality = FilterQuality.high;
       }
     }
-    canvas.drawImage(
-        image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
+    canvas.drawImage(image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
+    canvas.rotate(270);
   }
 
   @override
