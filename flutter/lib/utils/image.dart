@@ -79,7 +79,7 @@ class ImagePainter extends CustomPainter {
         paint.filterQuality = FilterQuality.high;
       }
     }
-    canvas.translate(x + image!.width / 2, y + image!.height / 2);
+    canvas.translate(size.width * scale / 2, size.height * scale / 2);
     canvas.rotate(270 * pi / 180);
     canvas.drawImage(image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
   }
