@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:image/image.dart' as img;
 
 import 'package:flutter/widgets.dart';
 
@@ -22,7 +23,10 @@ Future<ui.Image> decodeImageFromPixels(
     assert(allowUpscaling || targetHeight <= height);
   }
 
-  final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
+  final origin = img.decodeBmp(pixels);
+  final fixImg = img.copyRotate(origin!, angle: 270);
+
+  final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(img.encodeBmp(fixImg));
   onPixelsCopied?.call();
   final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
     buffer,
@@ -79,8 +83,7 @@ class ImagePainter extends CustomPainter {
         paint.filterQuality = FilterQuality.high;
       }
     }
-    canvas.translate(size.width * scale / 2, size.height * scale / 2);
-    canvas.rotate(270 * pi / 180);
+
     canvas.drawImage(image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
   }
 
