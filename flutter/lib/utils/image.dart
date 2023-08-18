@@ -30,8 +30,8 @@ Future<ui.Image> decodeImageFromPixels(
   onPixelsCopied?.call();
   final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
     buffer,
-    width: width,
-    height: height,
+    width: height,
+    height: width,
     rowBytes: rowBytes,
     pixelFormat: format,
   );
