@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -78,7 +79,8 @@ class ImagePainter extends CustomPainter {
         paint.filterQuality = FilterQuality.high;
       }
     }
-    canvas.rotate(270);
+    canvas.translate(x + image!.width / 2, y + image!.height / 2);
+    canvas.rotate(270 * pi / 180);
     canvas.drawImage(image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
   }
 
