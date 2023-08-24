@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 
 Future<ui.Image> decodeImageFromPixels(
   Uint8List pixels,
@@ -23,7 +24,7 @@ Future<ui.Image> decodeImageFromPixels(
     assert(allowUpscaling || targetHeight <= height);
   }
 
-  Uint8List rotatedImageData = rotation != 0 ? rotateImageArbitrary(pixels,width,height,rotation) : pixels;
+  Uint8List rotatedImageData = rotateImage(pixels,width,height,rotation);
 
   final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(rotatedImageData);
   onPixelsCopied?.call();
@@ -55,33 +56,37 @@ Future<ui.Image> decodeImageFromPixels(
   return frameInfo.image;
 }
 
-Uint8List rotateImageArbitrary(Uint8List pixels, int width, int height, int rotationAngle) {
-  double angle = rotationAngle * pi / 180.0;
-  int newWidth = rotationAngle % 180 == 0 ? width : height;
-  int newHeight = rotationAngle % 180 == 0 ? height : width;
+Uint8List rotateImage(Uint8List pixels, int width, int height, int rotation) {
+  int rotationAngle = rotation % 360;
+  if(rotationAngle<0) rotationAngle += 360;
+  if(rotationAngle == 0) return pixels;
+  int newWidth = width;
+  int newHeight = height;
+
+  if (rotationAngle % 180 != 0) {
+    newWidth = height;
+    newHeight = width;
+  }
 
   Uint8List rotatedImageData = Uint8List(pixels.length);
 
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
       int sourceIndex = (y * width + x) * 4;
+      int targetIndex = sourceIndex;
 
-      // Calculate new coordinates after rotation
-      int centerX = width ~/ 2;
-      int centerY = height ~/ 2;
-      int offsetX = x - centerX;
-      int offsetY = y - centerY;
-      int rotatedX = (offsetX * cos(angle) - offsetY * sin(angle)).round() + centerX;
-      int rotatedY = (offsetX * sin(angle) + offsetY * cos(angle)).round() + centerY;
-
-      if (rotatedX >= 0 && rotatedX < newWidth && rotatedY >= 0 && rotatedY < newHeight) {
-        int targetIndex = (rotatedY * newWidth + rotatedX) * 4;
-
-        rotatedImageData[targetIndex] = pixels[sourceIndex];
-        rotatedImageData[targetIndex + 1] = pixels[sourceIndex + 1];
-        rotatedImageData[targetIndex + 2] = pixels[sourceIndex + 2];
-        rotatedImageData[targetIndex + 3] = pixels[sourceIndex + 3];
+      if (rotationAngle == 90) {
+        targetIndex = ((newHeight - x - 1) * newWidth + y) * 4;
+      } else if (rotationAngle == 180) {
+        targetIndex = ((newHeight - y - 1) * newWidth + (newWidth - x - 1)) * 4;
+      } else if (rotationAngle == 270) {
+        targetIndex = (x * newWidth + (newWidth - y - 1)) * 4;
       }
+
+      rotatedImageData[targetIndex] = pixels[sourceIndex];
+      rotatedImageData[targetIndex + 1] = pixels[sourceIndex + 1];
+      rotatedImageData[targetIndex + 2] = pixels[sourceIndex + 2];
+      rotatedImageData[targetIndex + 3] = pixels[sourceIndex + 3];
     }
   }
 
