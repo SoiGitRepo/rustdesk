@@ -47,6 +47,7 @@ var isWebDesktop = false;
 var isMobile = isAndroid || isIOS;
 var version = "";
 int androidVersion = 0;
+var rotation = 0;
 
 /// only available for Windows target
 int windowsBuildNumber = 0;

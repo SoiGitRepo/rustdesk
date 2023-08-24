@@ -1,9 +1,9 @@
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:image/image.dart' as img;
-
+import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_hbb/common.dart';
 
 Future<ui.Image> decodeImageFromPixels(
   Uint8List pixels,
@@ -23,10 +23,9 @@ Future<ui.Image> decodeImageFromPixels(
     assert(allowUpscaling || targetHeight <= height);
   }
 
-  final origin = img.decodeBmp(pixels);
-  final fixImg = img.copyRotate(origin!, angle: 270);
+  Uint8List rotatedImageData = rotation != 0 ? rotateImageArbitrary(pixels,width,height,rotation) : pixels;
 
-  final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(img.encodeBmp(fixImg));
+  final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(rotatedImageData);
   onPixelsCopied?.call();
   final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
     buffer,
@@ -54,6 +53,39 @@ Future<ui.Image> decodeImageFromPixels(
   buffer.dispose();
   descriptor.dispose();
   return frameInfo.image;
+}
+
+Uint8List rotateImageArbitrary(Uint8List pixels, int width, int height, int rotationAngle) {
+  double angle = rotationAngle * pi / 180.0;
+  int newWidth = rotationAngle % 180 == 0 ? width : height;
+  int newHeight = rotationAngle % 180 == 0 ? height : width;
+
+  Uint8List rotatedImageData = Uint8List(pixels.length);
+
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      int sourceIndex = (y * width + x) * 4;
+
+      // Calculate new coordinates after rotation
+      int centerX = width ~/ 2;
+      int centerY = height ~/ 2;
+      int offsetX = x - centerX;
+      int offsetY = y - centerY;
+      int rotatedX = (offsetX * cos(angle) - offsetY * sin(angle)).round() + centerX;
+      int rotatedY = (offsetX * sin(angle) + offsetY * cos(angle)).round() + centerY;
+
+      if (rotatedX >= 0 && rotatedX < newWidth && rotatedY >= 0 && rotatedY < newHeight) {
+        int targetIndex = (rotatedY * newWidth + rotatedX) * 4;
+
+        rotatedImageData[targetIndex] = pixels[sourceIndex];
+        rotatedImageData[targetIndex + 1] = pixels[sourceIndex + 1];
+        rotatedImageData[targetIndex + 2] = pixels[sourceIndex + 2];
+        rotatedImageData[targetIndex + 3] = pixels[sourceIndex + 3];
+      }
+    }
+  }
+
+  return rotatedImageData;
 }
 
 class ImagePainter extends CustomPainter {

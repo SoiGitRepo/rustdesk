@@ -7,6 +7,7 @@ package com.carriez.flutter_hbb
  * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
  */
 
+import android.graphics.Bitmap
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.*
@@ -44,6 +45,7 @@ import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
+import com.carriez.flutter_hbb.ImageUtils
 
 const val DEFAULT_NOTIFY_TITLE = "RustDesk"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
@@ -246,6 +248,11 @@ class MainService : Service() {
         } else {
             w = min
             h = max
+        }
+        val androidModel = android.os.Build.MODEL
+        if (androidModel == "rk3399-all"){
+            w = max
+            h = min
         }
         Log.d(logTag,"updateScreenInfo:w:$w,h:$h")
         var scale = 1

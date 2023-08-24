@@ -131,6 +131,9 @@ class PeerTabModel with ChangeNotifier {
       }
     }
     _lastId = peer.id;
+    if (peer.hostname.contains("rk3399")) {
+      rotation = -90;
+    }
     notifyListeners();
   }
 

@@ -120,6 +120,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           }
         }));
   }
+  v.add(TTextMenu(child: Text('旋转画布'), onPressed: () => rotation -= 90));
   // reset canvas
   if (isMobile) {
     v.add(TTextMenu(
