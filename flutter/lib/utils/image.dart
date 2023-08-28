@@ -24,14 +24,22 @@ Future<ui.Image> decodeImageFromPixels(
     assert(allowUpscaling || targetHeight <= height);
   }
 
-  Uint8List rotatedImageData = rotateImage(pixels,width,height,rotation);
+  int rotationAngle = rotation % 360;
+  if (rotationAngle < 0) rotationAngle += 360;
+  int newWidth = width;
+  int newHeight = height;
+  if (rotationAngle % 180 != 0) {
+    newWidth = height;
+    newHeight = width;
+  }
+  Uint8List rotatedImageData = rotateImage(pixels, width, height, rotation);
 
   final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(rotatedImageData);
   onPixelsCopied?.call();
   final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
     buffer,
-    width: height,
-    height: width,
+    width: newWidth,
+    height: newHeight,
     rowBytes: rowBytes,
     pixelFormat: format,
   );
@@ -56,10 +64,8 @@ Future<ui.Image> decodeImageFromPixels(
   return frameInfo.image;
 }
 
-Uint8List rotateImage(Uint8List pixels, int width, int height, int rotation) {
-  int rotationAngle = rotation % 360;
-  if(rotationAngle<0) rotationAngle += 360;
-  if(rotationAngle == 0) return pixels;
+Uint8List rotateImage(Uint8List pixels, int width, int height, int rotationAngle) {
+  if (rotationAngle == 0) return pixels;
   int newWidth = width;
   int newHeight = height;
 
