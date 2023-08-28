@@ -48,17 +48,6 @@ pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[derive(Default)]
-pub struct CacheFlutter {
-    pub pi: PeerInfo,
-    pub sp: Option<SwitchDisplay>,
-    pub cursor_data: HashMap<u64, CursorData>,
-    pub cursor_id: u64,
-    pub is_secured_direct: Option<(bool, bool)>,
-}
-
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
     pub session_id: SessionID, // different from the one in LoginConfigHandler, used for flutter UI message pass
@@ -73,9 +62,6 @@ pub struct Session<T: InvokeUiSession> {
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
-    #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub cache_flutter: Arc<RwLock<CacheFlutter>>,
 }
 
 #[derive(Clone)]
@@ -724,6 +710,49 @@ impl<T: InvokeUiSession> Session<T> {
         send_pointer_device_event(evt, alt, ctrl, shift, command, self);
     }
 
+    pub fn send_touch_pan_event(
+        &self,
+        event: &str,
+        x: i32,
+        y: i32,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        let mut touch_evt = TouchEvent::new();
+        match event {
+            "pan_start" => {
+                touch_evt.set_pan_start(TouchPanStart {
+                    x,
+                    y,
+                    ..Default::default()
+                });
+            }
+            "pan_update" => {
+                touch_evt.set_pan_update(TouchPanUpdate {
+                    x,
+                    y,
+                    ..Default::default()
+                });
+            }
+            "pan_end" => {
+                touch_evt.set_pan_end(TouchPanEnd {
+                    x,
+                    y,
+                    ..Default::default()
+                });
+            }
+            _ => {
+                log::warn!("unknown touch pan event: {}", event);
+                return;
+            }
+        };
+        let mut evt = PointerDeviceEvent::new();
+        evt.set_touch_event(touch_evt);
+        send_pointer_device_event(evt, alt, ctrl, shift, command, self);
+    }
+
     pub fn send_mouse(
         &self,
         mask: i32,
@@ -927,34 +956,49 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    pub fn handle_peer_switch_display(&self, display: &SwitchDisplay) {
-        self.ui_handler.switch_display(display);
-
-        if self.last_change_display.lock().unwrap().is_the_same_record(
-            display.display,
-            display.width,
-            display.height,
-        ) {
-            let custom_resolution = if display.width != display.original_resolution.width
-                || display.height != display.original_resolution.height
-            {
-                Some((display.width, display.height))
-            } else {
-                None
-            };
+    fn set_custom_resolution(&self, display: &SwitchDisplay) {
+        if display.width == display.original_resolution.width
+            && display.height == display.original_resolution.height
+        {
             self.lc
                 .write()
                 .unwrap()
-                .set_custom_resolution(display.display, custom_resolution);
+                .set_custom_resolution(display.display, None);
+        } else {
+            let last_change_display = self.last_change_display.lock().unwrap();
+            if last_change_display.display == display.display {
+                let wh = if last_change_display.is_the_same_record(
+                    display.display,
+                    display.width,
+                    display.height,
+                ) {
+                    Some((display.width, display.height))
+                } else {
+                    // display origin is changed, or some other events.
+                    None
+                };
+                self.lc
+                    .write()
+                    .unwrap()
+                    .set_custom_resolution(display.display, wh);
+            }
         }
     }
 
+    #[inline]
+    pub fn handle_peer_switch_display(&self, display: &SwitchDisplay) {
+        self.ui_handler.switch_display(display);
+        self.set_custom_resolution(display);
+    }
+
+    #[inline]
     pub fn change_resolution(&self, display: i32, width: i32, height: i32) {
         *self.last_change_display.lock().unwrap() =
             ChangeDisplayRecord::new(display, width, height);
         self.do_change_resolution(width, height);
     }
 
+    #[inline]
     fn try_change_init_resolution(&self, display: i32) {
         if let Some((w, h)) = self.lc.read().unwrap().get_custom_resolution(display) {
             self.do_change_resolution(w, h);
@@ -973,10 +1017,12 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
+    #[inline]
     pub fn request_voice_call(&self) {
         self.send(Data::NewVoiceCall);
     }
 
+    #[inline]
     pub fn close_voice_call(&self) {
         self.send(Data::CloseVoiceCall);
     }
@@ -1202,23 +1248,6 @@ impl<T: InvokeUiSession> Session<T> {
     }
     pub fn ctrl_alt_del(&self) {
         self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
-    }
-
-    #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn restore_flutter_cache(&mut self) {
-        if let Some((is_secured, direct)) = self.cache_flutter.read().unwrap().is_secured_direct {
-            self.set_connection_type(is_secured, direct);
-        }
-        let pi = self.cache_flutter.read().unwrap().pi.clone();
-        self.handle_peer_info(pi);
-        if let Some(sp) = self.cache_flutter.read().unwrap().sp.as_ref() {
-            self.handle_peer_switch_display(sp);
-        }
-        for (_, cd) in self.cache_flutter.read().unwrap().cursor_data.iter() {
-            self.set_cursor_data(cd.clone());
-        }
-        self.set_cursor_id(self.cache_flutter.read().unwrap().cursor_id.to_string());
     }
 }
 

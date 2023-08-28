@@ -528,5 +528,18 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Move tab to new window", "Tab in neues Fenster verschieben"),
         ("Can not be empty", "Darf nicht leer sein"),
         ("Already exists", "Existiert bereits"),
+        ("Change Password", "Passwort ändern"),
+        ("Refresh Password", "Passwort aktualisieren"),
+        ("ID", "ID"),
+        ("Grid View", "Rasteransicht"),
+        ("List View", "Listenansicht"),
+        ("Select", "Auswählen"),
+        ("Toggle Tags", "Tags umschalten"),
+        ("pull_ab_failed_tip", "Aktualisierung des Adressbuchs fehlgeschlagen"),
+        ("push_ab_failed_tip", "Synchronisierung des Adressbuchs mit dem Server fehlgeschlagen"),
+        ("synced_peer_readded_tip", "Die Geräte, die in den letzten Sitzungen vorhanden waren, werden erneut zum Adressbuch hinzugefügt."),
+        ("Change Color", "Farbe ändern"),
+        ("Primary Color", "Primärfarbe"),
+        ("HSV Color", "HSV-Farbe"),
     ].iter().cloned().collect();
 }

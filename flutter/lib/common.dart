@@ -1077,6 +1077,45 @@ Color str2color(String str, [alpha = 0xFF]) {
   return Color((hash & 0xFF7FFF) | (alpha << 24));
 }
 
+Color str2color2(String str, {List<int> existing = const []}) {
+  Map<String, Color> colorMap = {
+    "red": Colors.red,
+    "green": Colors.green,
+    "blue": Colors.blue,
+    "orange": Colors.orange,
+    "purple": Colors.purple,
+    "grey": Colors.grey,
+    "cyan": Colors.cyan,
+    "lime": Colors.lime,
+    "teal": Colors.teal,
+    "pink": Colors.pink[200]!,
+    "indigo": Colors.indigo,
+    "brown": Colors.brown,
+  };
+  final color = colorMap[str.toLowerCase()];
+  if (color != null) {
+    return color.withAlpha(0xFF);
+  }
+  if (str.toLowerCase() == 'yellow') {
+    return Colors.yellow.withAlpha(0xFF);
+  }
+  var hash = 0;
+  for (var i = 0; i < str.length; i++) {
+    hash += str.codeUnitAt(i);
+  }
+  List<Color> colorList = colorMap.values.toList();
+  hash = hash % colorList.length;
+  var result = colorList[hash].withAlpha(0xFF);
+  if (existing.contains(result.value)) {
+    Color? notUsed =
+        colorList.firstWhereOrNull((e) => !existing.contains(e.value));
+    if (notUsed != null) {
+      result = notUsed;
+    }
+  }
+  return result;
+}
+
 const K = 1024;
 const M = K * K;
 const G = M * K;
@@ -1321,7 +1360,7 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
       peer.username.toLowerCase().contains(searchText)) {
     return true;
   }
-  final alias = await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+  final alias = peer.alias;
   if (alias.isEmpty) {
     return false;
   }
@@ -2325,10 +2364,18 @@ void onCopyFingerprint(String value) {
   }
 }
 
+Future<bool> callMainCheckSuperUserPermission() async {
+  bool checked = await bind.mainCheckSuperUserPermission();
+  if (Platform.isMacOS) {
+    await windowManager.show();
+  }
+  return checked;
+}
+
 Future<void> start_service(bool is_start) async {
   bool checked = !bind.mainIsInstalled() ||
       !Platform.isMacOS ||
-      await bind.mainCheckSuperUserPermission();
+      await callMainCheckSuperUserPermission();
   if (checked) {
     bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
   }

@@ -125,6 +125,7 @@ void runMainApp(bool startService) async {
     bind.pluginSyncUi(syncTo: kAppTypeMain);
     bind.pluginListReload();
   }
+  gFFI.abModel.loadCache();
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // Set window option.
@@ -152,6 +153,7 @@ void runMobileApp() async {
   await initEnv(kAppTypeMain);
   if (isAndroid) androidChannelInit();
   platformFFI.syncAndroidServiceAppDirConfigPath();
+  gFFI.abModel.loadCache();
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
 }
@@ -266,10 +268,12 @@ hideCmWindow({bool isStartup = false}) async {
       await windowManager.hide();
     });
   } else {
-    await windowManager.setOpacity(0);
-    bind.mainHideDocker();
-    await windowManager.minimize();
-    await windowManager.hide();
+    if (await windowManager.getOpacity() != 0) {
+      await windowManager.setOpacity(0);
+      bind.mainHideDocker();
+      await windowManager.minimize();
+      await windowManager.hide();
+    }
   }
 }
 
