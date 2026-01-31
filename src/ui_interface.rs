@@ -799,20 +799,17 @@ pub fn remove_discovered(id: String) {
 
 #[inline]
 pub fn get_uuid() -> String {
-    //#region 获取UUID - Android平台使用export_serial_number
+    // Android: use ID directly as UUID (base64 of ID bytes)
     #[cfg(target_os = "android")]
     {
-        // 优先尝试从export_serial_number获取UUID
-        if let Some(serial_number) = get_export_serial_number() {
-            log::info!("Using export_serial_number as UUID: {}", serial_number);
-            return crate::encode64(serial_number.into_bytes());
-        }
-        
-        // 如果无法获取export_serial_number，回退到默认UUID生成
-        log::warn!("Failed to get export_serial_number, falling back to default UUID");
+        let id = Config::get_id();
+        return crate::encode64(id.into_bytes());
     }
-    //#endregion
-    crate::encode64(hbb_common::get_uuid())
+    // Other platforms: keep using generated device UUID bytes
+    #[cfg(not(target_os = "android"))]
+    {
+        return crate::encode64(hbb_common::get_uuid());
+    }
 }
 
 #[inline]

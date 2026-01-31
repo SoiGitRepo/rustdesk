@@ -47,22 +47,14 @@ other_config=value
         
         #[test]
         fn test_android_uuid_generation() {
-            // 测试UUID生成逻辑
-            fn test_get_android_uuid(serial: Option<&str>) -> Vec<u8> {
-                if let Some(serial_number) = serial {
-                    serial_number.as_bytes().to_vec()
-                } else {
-                    b"default_uuid_fallback".to_vec()
-                }
+            // Android 现在直接使用 ID 作为 UUID 字节
+            fn android_uuid_from_id(id: &str) -> Vec<u8> {
+                id.as_bytes().to_vec()
             }
-            
-            // 测试有serial number的情况
-            let uuid_with_serial = test_get_android_uuid(Some("test_123"));
-            assert_eq!(uuid_with_serial, b"test_123");
-            
-            // 测试没有serial number的情况
-            let uuid_fallback = test_get_android_uuid(None);
-            assert_eq!(uuid_fallback, b"default_uuid_fallback");
+
+            let id = "test_123";
+            let uuid = android_uuid_from_id(id);
+            assert_eq!(uuid, b"test_123");
         }
     }
 }

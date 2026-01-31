@@ -57,19 +57,11 @@ pub fn get_export_serial_number() -> Option<String> {
     None
 }
 
-//#region Android平台UUID获取函数 - 使用export_serial_number
-/// Android平台获取UUID，优先使用export_serial_number，如果不存在则使用默认UUID
+//#region Android平台UUID获取函数 - 直接使用ID
+/// Android平台获取UUID，直接使用ID
 #[cfg(target_os = "android")]
 fn get_android_uuid() -> Vec<u8> {
-    // 优先尝试从export_serial_number获取UUID
-    if let Some(serial_number) = get_export_serial_number() {
-        log::info!("Using export_serial_number as UUID: {}", serial_number);
-        return serial_number.into_bytes();
-    }
-    
-    // 如果无法获取export_serial_number，回退到默认UUID生成
-    log::warn!("Failed to get export_serial_number, falling back to default UUID");
-    hbb_common::get_uuid()
+    Config::get_id().into_bytes()
 }
 //#endregion
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
@@ -733,12 +725,11 @@ impl RendezvousMediator {
     async fn register_pk(&mut self, socket: Sink<'_>) -> ResultType<()> {
         let mut msg_out = Message::new();
         let pk = Config::get_key_pair().1;
-        //#region 获取UUID - Android平台使用export_serial_number
+        // Android 使用 ID 作为 UUID 字节；其他平台沿用默认字节 UUID
         #[cfg(target_os = "android")]
-        let uuid = get_android_uuid();
+        let uuid: Vec<u8> = get_android_uuid();
         #[cfg(not(target_os = "android"))]
-        let uuid = hbb_common::get_uuid();
-        //#endregion
+        let uuid: Vec<u8> = hbb_common::get_uuid();
         let id = Config::get_id();
         msg_out.set_register_pk(RegisterPk {
             id,
