@@ -98,13 +98,12 @@ impl TerminalChildOps for PortableChildWrapper {
 
                         if let Some(pid) = self.0.process_id() {
                             unsafe {
-                                let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
-                                if h.0 != 0 {
+                                if let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
                                     let mut code: u32 = 0;
-                                    let ok = GetExitCodeProcess(h, &mut code).as_bool();
+                                    let ok = GetExitCodeProcess(h, &mut code).is_ok();
                                     let _ = CloseHandle(h);
                                     if ok {
-                                        if code == STILL_ACTIVE.0 as u32 {
+                                        if code == STILL_ACTIVE {
                                             return Ok(None);
                                         } else {
                                             return Ok(Some(code as i32));
@@ -1011,7 +1010,7 @@ impl TerminalServiceProxy {
             #[cfg(target_os = "windows")]
             if let Some(token) = &self.user_token {
                 // portable_pty on Windows expects a raw HANDLE pointer (*mut c_void)
-                let handle = token.as_raw() as *mut std::ffi::c_void;
+                let handle = token.as_raw() as *mut winapi::ctypes::c_void;
                 cmd.set_user_token(handle);
             }
 
