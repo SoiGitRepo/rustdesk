@@ -47,24 +47,6 @@ pub struct UiStatus {
     pub video_conn_count: usize,
 }
 
-// Android: 从 /sdcard/robot/config/base.properties 读取 export_serial_number
-#[cfg(target_os = "android")]
-pub fn get_export_serial_number() -> Option<String> {
-    const PATH: &str = "/sdcard/robot/config/base.properties";
-    let content = std::fs::read_to_string(PATH).ok()?;
-    for raw in content.lines() {
-        let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') { continue; }
-        if let Some((k, v)) = line.split_once('=') {
-            if k.trim() == "export_serial_number" {
-                let v = v.trim();
-                if !v.is_empty() { return Some(v.to_string()); }
-            }
-        }
-    }
-    None
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct LoginDeviceInfo {
     pub os: String,
@@ -799,17 +781,13 @@ pub fn remove_discovered(id: String) {
 
 #[inline]
 pub fn get_uuid() -> String {
-    // Android: use ID directly as UUID (base64 of ID bytes)
+    //#region 获取UUID - Android平台 UUID==ID
     #[cfg(target_os = "android")]
     {
-        let id = Config::get_id();
-        return crate::encode64(id.into_bytes());
+        return crate::android_device_id::get_android_uuid_b64_from_id();
     }
-    // Other platforms: keep using generated device UUID bytes
-    #[cfg(not(target_os = "android"))]
-    {
-        return crate::encode64(hbb_common::get_uuid());
-    }
+    //#endregion
+    crate::encode64(hbb_common::get_uuid())
 }
 
 #[inline]
@@ -1347,133 +1325,120 @@ pub async fn change_id_shared(id: String, old_id: String) -> String {
 }
 
 pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
-    if !hbb_common::is_valid_custom_id(&id) {
+    // Android 放宽校验：允许数字或字母开头，长度 6-16，字符集 [A-Za-z0-9_-]
+    #[cfg(target_os = "android")]
+    let valid = {
+        let bytes = id.as_bytes();
+        if bytes.len() < 6 || bytes.len() > 16 {
+            false
+        } else {
+            let first = bytes[0] as char;
+            if !first.is_ascii_alphanumeric() {
+                false
+            } else {
+                bytes.iter().all(|&b| {
+                    let c = b as char;
+                    c.is_ascii_alphanumeric() || c == '_' || c == '-'
+                })
+            }
+        }
+    };
+    #[cfg(not(target_os = "android"))]
+    let valid = hbb_common::is_valid_custom_id(&id);
+
+    if !valid {
         log::debug!(
             "debugging invalid id: \"{id}\", len: {}, base64: \"{}\"",
             id.len(),
             crate::encode64(&id)
         );
         let bom = id.trim_start_matches('\u{FEFF}');
+        #[cfg(target_os = "android")]
+        {
+            let bytes = bom.as_bytes();
+            let bom_valid = if bytes.len() < 6 || bytes.len() > 16 {
+                false
+            } else {
+                let first = bytes.get(0).map(|b| *b as char).unwrap_or('\0');
+                first.is_ascii_alphanumeric()
+                    && bytes.iter().all(|&b| {
+                        let c = b as char;
+                        c.is_ascii_alphanumeric() || c == '_' || c == '-'
+                    })
+            };
+            log::debug!("bom(android): {}", bom_valid);
+        }
+        #[cfg(not(target_os = "android"))]
         log::debug!("bom: {}", hbb_common::is_valid_custom_id(&bom));
         return INVALID_FORMAT;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let uuid = Bytes::from(
-        hbb_common::machine_uid::get()
-            .unwrap_or("".to_owned())
-            .as_bytes()
-            .to_vec(),
-    );
-    //#region 获取UUID - Android平台使用export_serial_number
+    //#region Android 修改ID：写入 base.properties 的 export_serial_number_manual 并立刻生效
     #[cfg(target_os = "android")]
-    let uuid = {
-        // 优先尝试从export_serial_number获取UUID
-        if let Some(serial_number) = get_export_serial_number() {
-            log::info!("Using export_serial_number as UUID for change_id: {}", serial_number);
-            Bytes::from(serial_number.into_bytes())
-        } else {
-            log::warn!("Failed to get export_serial_number, falling back to default UUID for change_id");
-            Bytes::from(hbb_common::get_uuid())
+    {
+        if let Err(e) = crate::android_device_id::write_export_serial_number_manual(&id) {
+            log::error!("Failed to write export_serial_number_manual: {e}");
+            return UNKNOWN_ERROR;
         }
-    };
-    #[cfg(target_os = "ios")]
-    let uuid = Bytes::from(hbb_common::get_uuid());
-    //#endregion
-
-    if uuid.is_empty() {
-        log::error!("Failed to change id, uuid is_empty");
-        return UNKNOWN_ERROR;
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let rendezvous_servers = crate::ipc::get_rendezvous_servers(1_000).await;
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    let rendezvous_servers = Config::get_rendezvous_servers();
-
-    let mut futs = Vec::new();
-    let err: Arc<Mutex<&str>> = Default::default();
-    for rendezvous_server in rendezvous_servers {
-        let err = err.clone();
-        let id = id.to_owned();
-        let uuid = uuid.clone();
-        let old_id = old_id.clone();
-        futs.push(tokio::spawn(async move {
-            let tmp = check_id(rendezvous_server, old_id, id, uuid).await;
-            if !tmp.is_empty() {
-                *err.lock().unwrap() = tmp;
-            }
-        }));
-    }
-    join_all(futs).await;
-    let err = *err.lock().unwrap();
-    if err.is_empty() {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        crate::ipc::set_config_async("id", id.to_owned()).await.ok();
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            Config::set_key_confirmed(false);
-            Config::set_id(&id);
-        }
+        // 立刻生效：更新运行时ID并触发重注册
+        Config::set_key_confirmed(false);
+        Config::set_id(&id);
+        crate::rendezvous_mediator::RendezvousMediator::restart();
         return "";
     }
+    //#endregion
 
-    // Android: 若 ID 已存在，按 1..n 前缀 + export_serial_number（或原 id）重试注册
-    #[cfg(target_os = "android")]
-    if err == "Not available" {
-        let base_serial = get_export_serial_number();
-        //#region 获取UUID - Android平台使用export_serial_number
-        let uuid = {
-            // 优先尝试从export_serial_number获取UUID
-            if let Some(ref serial_number) = base_serial {
-                log::info!("Using export_serial_number as UUID for retry: {}", serial_number);
-                Bytes::from(serial_number.clone().into_bytes())
-            } else {
-                log::warn!("Failed to get export_serial_number, falling back to default UUID for retry");
-                Bytes::from(hbb_common::get_uuid())
-            }
-        };
-        //#endregion
-        let mut prefix_num: u32 = 1;
-        loop {
-            let candidate = if let Some(base) = &base_serial {
-                format!("{}{}", prefix_num, base)
-            } else {
-                format!("{}{}", prefix_num, id)
-            };
-            let rendezvous_servers = Config::get_rendezvous_servers();
-            let mut futs = Vec::new();
-            let err2: Arc<Mutex<&str>> = Default::default();
-            for rendezvous_server in rendezvous_servers {
-                let err2 = err2.clone();
-                let uuid = uuid.clone();
-                let old_id = old_id.clone();
-                let candidate2 = candidate.clone();
-                futs.push(tokio::spawn(async move {
-                    let tmp = check_id(rendezvous_server, old_id, candidate2, uuid).await;
-                    if !tmp.is_empty() {
-                        *err2.lock().unwrap() = tmp;
-                    }
-                }));
-            }
-            join_all(futs).await;
-            let err2 = *err2.lock().unwrap();
-            if err2.is_empty() {
-                Config::set_key_confirmed(false);
-                Config::set_id(&candidate);
-                return "";
-            }
-            if err2 != "Not available" {
-                return err2;
-            }
-            prefix_num += 1;
-            if prefix_num > 1000 { // 防止极端情况下无限循环
-                return err;
-            }
+    #[cfg(not(target_os = "android"))]
+    {
+        #[cfg(not(target_os = "ios"))]
+        let uuid = Bytes::from(
+            hbb_common::machine_uid::get()
+                .unwrap_or("".to_owned())
+                .as_bytes()
+                .to_vec(),
+        );
+        #[cfg(target_os = "ios")]
+        let uuid = Bytes::from(hbb_common::get_uuid());
+
+        if uuid.is_empty() {
+            log::error!("Failed to change id, uuid is_empty");
+            return UNKNOWN_ERROR;
         }
-    }
 
-    err
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let rendezvous_servers = crate::ipc::get_rendezvous_servers(1_000).await;
+        #[cfg(target_os = "ios")]
+        let rendezvous_servers = Config::get_rendezvous_servers();
+
+        let mut futs = Vec::new();
+        let err: Arc<Mutex<&str>> = Default::default();
+        for rendezvous_server in rendezvous_servers {
+            let err = err.clone();
+            let id = id.to_owned();
+            let uuid = uuid.clone();
+            let old_id = old_id.clone();
+            futs.push(tokio::spawn(async move {
+                let tmp = check_id(rendezvous_server, old_id, id, uuid).await;
+                if !tmp.is_empty() {
+                    *err.lock().unwrap() = tmp;
+                }
+            }));
+        }
+        join_all(futs).await;
+        let err = *err.lock().unwrap();
+        if err.is_empty() {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            crate::ipc::set_config_async("id", id.to_owned()).await.ok();
+            #[cfg(target_os = "ios")]
+            {
+                Config::set_key_confirmed(false);
+                Config::set_id(&id);
+            }
+            return "";
+        }
+
+        return err;
+    }
 }
 
 async fn check_id(
